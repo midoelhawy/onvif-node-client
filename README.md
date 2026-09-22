@@ -49,16 +49,16 @@ If this library helps you, you can support the project:
 
 ## Install
 
-Install from the public GitHub repo (**no token**). npm will clone the repo and build `dist/` via the `prepare` script.
+Install from a **GitHub Release** asset (built `dist/`, **no token**, no npm registry):
 
 ```bash
-npm i github:midoelhawy/onvif-node-client
+npm i https://github.com/midoelhawy/onvif-node-client/releases/download/v1.3.0/onvif-node-client-1.3.0.tgz
 ```
 
-Pin a release tag:
+Or from source (CI/`prepare` builds `dist/` if missing):
 
 ```bash
-npm i github:midoelhawy/onvif-node-client#v1.1.0
+npm i github:midoelhawy/onvif-node-client#v1.3.0
 ```
 
 ```ts
@@ -800,17 +800,17 @@ Full list of public exports: **[docs/README.md](docs/README.md)**.
 
 ## Build & release
 
-> Registry publish (npmjs / GitHub Packages) is **disabled for now**. Consumers install from git. On tag `v*`, CI only verifies the build.
+> Registry publish (npmjs / GitHub Packages) is **disabled**. On tag `v*`, GitHub Actions builds the package, runs `npm pack`, and creates a **GitHub Release** with the `.tgz` asset. **`dist/` is not committed.**
 
 ```bash
 # working tree clean, on main
-npm run release:patch    # bump → tag vX.Y.Z → push
+npm run release:patch    # bump → tag vX.Y.Z → push (CI publishes the Release)
 ```
 
-Then install that tag:
+Then install from the release asset:
 
 ```bash
-npm i github:midoelhawy/onvif-node-client#v1.1.0
+npm i https://github.com/midoelhawy/onvif-node-client/releases/download/v1.3.0/onvif-node-client-1.3.0.tgz
 ```
 
 Local build:

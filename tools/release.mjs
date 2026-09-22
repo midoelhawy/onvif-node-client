@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Bump version, push tag. Consumers install from git (no registry publish yet).
+ * Bump version, push tag. GitHub Actions builds dist, packs, and creates a Release asset.
  *
  * Usage:
  *   node tools/release.mjs patch|minor|major
@@ -60,6 +60,7 @@ sh(`npm version ${level} -m "release: %s"`);
 
 const after = readPkg();
 const tag = `v${after.version}`;
+const tgz = `${after.name}-${after.version}.tgz`;
 
 sh("git push");
 sh("git push --tags");
@@ -68,8 +69,10 @@ console.log(`
 OK — ${after.name}@${after.version}
 Tag: ${tag}
 
-Install (no token):
-  npm i github:midoelhawy/onvif-node-client#${tag}
+CI will create the GitHub Release and upload ${tgz}.
+When the workflow finishes, install with:
+
+  npm i https://github.com/midoelhawy/onvif-node-client/releases/download/${tag}/${tgz}
 
 Repo: https://github.com/midoelhawy/onvif-node-client
 `);

@@ -48,4 +48,4 @@ jobs:
       - name: Reminder
         if: matrix.node-version == '22'
         run: |
-          echo "::notice title=CI does not publish packages::Push a tag v* or run workflow 'Publish GitHub Packages' to publish to GitHub Packages."
+          echo "::notice title=CI does not create releases::Push a tag v* (or run npm run release:patch) to build a GitHub Release with the installable .tgz asset."
