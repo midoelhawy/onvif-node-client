@@ -81,7 +81,24 @@ function withScopeInfo(device: OnvifDiscoveredDevice): OnvifDiscoveredDevice {
   };
 }
 
-function parseProbeMatches(xml: string, fromAddress: string, fromPort: number): OnvifDiscoveredDevice[] {
+function pickPreferredHttpXAddr(xAddrs: string[]): string | undefined {
+  const http = xAddrs.find((u) => /^https?:\/\//i.test(u) && !u.includes("["));
+  return http ?? xAddrs.find((u) => /^https?:\/\//i.test(u));
+}
+
+function httpPortFromXAddrs(xAddrs: string[]): number {
+  const xaddr = pickPreferredHttpXAddr(xAddrs);
+  if (!xaddr) return 80;
+  try {
+    const u = new URL(xaddr);
+    if (u.port) return Number(u.port);
+    return u.protocol === "https:" ? 443 : 80;
+  } catch {
+    return 80;
+  }
+}
+
+function parseProbeMatches(xml: string, fromAddress: string, _fromPort: number): OnvifDiscoveredDevice[] {
   const blocks = extractBlocks(xml, "ProbeMatch");
   if (!blocks.length) {
     if (/ProbeMatch/i.test(xml) || /XAddrs/i.test(xml)) {
@@ -90,7 +107,7 @@ function parseProbeMatches(xml: string, fromAddress: string, fromPort: number): 
         return [
           withScopeInfo({
             address: fromAddress,
-            port: fromPort,
+            port: httpPortFromXAddrs(xAddrs),
             xAddrs,
             types: splitTokens(extractTagText(xml, "Types")),
             scopes: splitTokens(extractTagText(xml, "Scopes")),
@@ -111,7 +128,7 @@ function parseProbeMatches(xml: string, fromAddress: string, fromPort: number): 
     const metadataVersion = extractTagText(b.innerXml, "MetadataVersion");
     return withScopeInfo({
       address: fromAddress,
-      port: fromPort,
+      port: httpPortFromXAddrs(xAddrs),
       xAddrs,
       types,
       scopes,
@@ -127,11 +144,6 @@ function hostFromXAddr(xaddr: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-function pickPreferredHttpXAddr(xAddrs: string[]): string | undefined {
-  const http = xAddrs.find((u) => /^https?:\/\//i.test(u) && !u.includes("["));
-  return http ?? xAddrs.find((u) => /^https?:\/\//i.test(u));
 }
 
 function mergeDevices(into: Map<string, OnvifDiscoveredDevice>, device: OnvifDiscoveredDevice): void {
@@ -154,13 +166,15 @@ function mergeDevices(into: Map<string, OnvifDiscoveredDevice>, device: OnvifDis
   const xAddrs = new Set([...existing.xAddrs, ...enriched.xAddrs]);
   const types = new Set([...existing.types, ...enriched.types]);
   const scopes = new Set([...existing.scopes, ...enriched.scopes]);
+  const mergedXAddrs = [...xAddrs];
   into.set(
     keyHost,
     withScopeInfo({
       ...existing,
       ...enriched,
       address: keyHost,
-      xAddrs: [...xAddrs],
+      port: httpPortFromXAddrs(mergedXAddrs),
+      xAddrs: mergedXAddrs,
       types: [...types],
       scopes: [...scopes],
       ...(enriched.metadataVersion || existing.metadataVersion

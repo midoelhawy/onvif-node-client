@@ -240,7 +240,7 @@ for (const d of result.devices) {
   devices: Array<{
     address: string;
     port: number;
-    xAddrs: string[];   // e.g. http://192.168.1.50/onvif/device_service
+    xAddrs: string[];   
     types: string[];
     scopes: string[];
     manufacturer?: string;
@@ -263,12 +263,11 @@ After a scan, feed a found XAddr host into `OnvifSupportService` / talk:
 ```ts
 const hit = result.devices[0];
 if (hit) {
-  const host = hit.address;
   const report = await new OnvifSupportService({
-    host,
-    port: 80,
+    host: hit.address,
+    port: hit.port,
     auth: { mode: "auto", username: "admin", password: "secret" },
-    rtspHost: host,
+    rtspHost: hit.address,
     rtspPort: 554
   }).discover();
 }
