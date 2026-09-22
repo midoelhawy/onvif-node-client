@@ -1,0 +1,64 @@
+{
+  "name": "onvif-node-client",
+  "version": "1.1.0",
+  "description": "Modular ONVIF client library for Node.js (TypeScript): WS-Discovery scan, discovery, events, and audio backchannel.",
+  "license": "GPL-3.0-or-later",
+  "author": "Midoelhawy",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/midoelhawy/onvif-node-client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/midoelhawy/onvif-node-client/issues"
+  },
+  "homepage": "https://github.com/midoelhawy/onvif-node-client#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "onvif",
+    "rtsp",
+    "backchannel",
+    "ws-discovery",
+    "ip-camera",
+    "speaker",
+    "g711",
+    "typescript"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "rm -rf dist",
+    "ci": "npm run typecheck && npm run build && npm run pack:dry",
+    "prepare": "npm run build",
+    "prepack": "npm run clean && npm run build",
+    "prepublishOnly": "npm run typecheck && npm run build",
+    "pack:dry": "npm pack --dry-run",
+    "release:patch": "node tools/release.mjs patch",
+    "release:minor": "node tools/release.mjs minor",
+    "release:major": "node tools/release.mjs major"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "typescript": "^5.8.3"
+  }
+}

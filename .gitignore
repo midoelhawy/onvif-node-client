@@ -1,0 +1,8 @@
+dist/
+node_modules/
+scripts/
+tests/
+web-talk/
+notes.txt
+
+*.tgz
