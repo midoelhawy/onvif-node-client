@@ -49,16 +49,22 @@ If this library helps you, you can support the project:
 
 ## Install
 
-Install from a **GitHub Release** asset (built `dist/`, **no token**, no npm registry):
+From the npm registry:
 
 ```bash
-npm i https://github.com/midoelhawy/onvif-node-client/releases/download/v1.3.0/onvif-node-client-1.3.0.tgz
+npm i onvif-node-client
+```
+
+Or from a **GitHub Release** asset (built `dist/`, no token):
+
+```bash
+npm i https://github.com/midoelhawy/onvif-node-client/releases/download/v1.5.0/onvif-node-client-1.5.0.tgz
 ```
 
 Or from source (CI/`prepare` builds `dist/` if missing):
 
 ```bash
-npm i github:midoelhawy/onvif-node-client#v1.3.0
+npm i github:midoelhawy/onvif-node-client#v1.5.0
 ```
 
 ```ts
@@ -799,17 +805,26 @@ Full list of public exports: **[docs/README.md](docs/README.md)**.
 
 ## Build & release
 
-> Registry publish (npmjs / GitHub Packages) is **disabled**. On tag `v*`, GitHub Actions builds the package, runs `npm pack`, and creates a **GitHub Release** with the `.tgz` asset. **`dist/` is not committed.**
+On tag `v*`, GitHub Actions builds the package, runs `npm pack`, and creates a **GitHub Release** with the `.tgz` asset. **`dist/` is not committed.** npm publish is a separate local step and is not part of that workflow.
 
 ```bash
 # working tree clean, on main
-npm run release:patch    # bump → tag vX.Y.Z → push (CI publishes the Release)
+npm run release:patch    # bump → tag vX.Y.Z → push (CI publishes the GitHub Release)
 ```
 
-Then install from the release asset:
+Publish the current version to npm (requires `npm login`, does not bump or push):
 
 ```bash
-npm i https://github.com/midoelhawy/onvif-node-client/releases/download/v1.3.0/onvif-node-client-1.3.0.tgz
+npm run publish:npm:dry  # pack preview, nothing uploaded
+npm run publish:npm      # npm publish --access public
+```
+
+Install:
+
+```bash
+npm i onvif-node-client
+# or from the GitHub Release asset
+npm i https://github.com/midoelhawy/onvif-node-client/releases/download/v1.5.0/onvif-node-client-1.5.0.tgz
 ```
 
 Local build:

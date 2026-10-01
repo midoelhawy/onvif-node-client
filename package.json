@@ -53,6 +53,8 @@
     "prepack": "npm run clean && npm run build",
     "prepublishOnly": "npm run typecheck && npm run build",
     "pack:dry": "npm pack --dry-run",
+    "publish:npm": "node tools/publish-npm.mjs",
+    "publish:npm:dry": "node tools/publish-npm.mjs --dry-run",
     "release:patch": "node tools/release.mjs patch",
     "release:minor": "node tools/release.mjs minor",
     "release:major": "node tools/release.mjs major"

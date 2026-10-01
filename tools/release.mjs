@@ -70,8 +70,14 @@ OK — ${after.name}@${after.version}
 Tag: ${tag}
 
 CI will create the GitHub Release and upload ${tgz}.
+npm publish is local only (not part of GitHub Actions):
+
+  npm run publish:npm:dry
+  npm run publish:npm
+
 When the workflow finishes, install with:
 
+  npm i ${after.name}
   npm i https://github.com/midoelhawy/onvif-node-client/releases/download/${tag}/${tgz}
 
 Repo: https://github.com/midoelhawy/onvif-node-client
