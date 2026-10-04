@@ -512,6 +512,13 @@ const client = new OnvifClient(conn);
 await client.init();
 
 const info = await client.getDeviceInformation();
+const clock = await client.getSystemDateAndTime();
+console.log(clock.utc?.toISOString(), clock.dateTimeType, clock.timeZone);
+
+// Fix broken camera time from host clock (preserves TZ/DST)
+const after = await client.syncSystemDateAndTime();
+console.log("synced →", after.utc?.toISOString());
+
 const profiles = await client.getProfilesDetailed();
 const streams = await client.getStreams();
 const caps = await client.getAdvertisedCapabilityEndpoints();
@@ -528,6 +535,50 @@ console.log(bc?.sdpSuggestsAudioBackchannel, bc?.sdpPreview);
 
 
 
+### Fix camera clock
+
+
+```ts
+// Quick fix: push host UTC, keep camera TimeZone / DaylightSavings
+await client.syncSystemDateAndTime();
+
+// If OSD shows wrong local hour (e.g. GMT+01 in October): also align TZ to host
+await client.syncSystemDateAndTime({ alignTimeZoneToHost: true });
+
+// Explicit instant + TZ
+await client.syncSystemDateAndTime({
+  date: new Date(),
+  timeZone: "GMT+02:00",
+  daylightSavings: false
+});
+
+// Low-level SetSystemDateAndTime (Manual)
+await client.setSystemDateAndTime({
+  dateTimeType: "Manual",
+  daylightSavings: false,
+  timeZone: "UTC0",
+  utcDateTime: new Date()
+});
+
+// Switch device to NTP mode (device must already have NTP servers configured)
+await client.setSystemDateAndTime({
+  dateTimeType: "NTP",
+  daylightSavings: false
+});
+```
+
+
+
+### Reboot camera
+
+
+```ts
+const { message } = await client.systemReboot();
+console.log(message ?? "reboot requested");
+```
+
+
+
 ### Main methods
 
 
@@ -535,6 +586,10 @@ console.log(bc?.sdpSuggestsAudioBackchannel, bc?.sdpPreview);
 | ----------------------------------------- | ----------------------------------- |
 | `init()`                                  | Resolve XAddrs from GetCapabilities |
 | `getDeviceInformation()`                  | Device identity                     |
+| `getSystemDateAndTime()`                  | Read camera clock / mode            |
+| `setSystemDateAndTime()`                  | Set Manual UTC or NTP mode          |
+| `syncSystemDateAndTime()`                 | Push host UTC (fix broken clocks); use `alignTimeZoneToHost` for OSD hour |
+| `systemReboot()`                          | Soft-reboot the device              |
 | `getProfiles()` / `getProfilesDetailed()` | Media profiles                      |
 | `getStreams()`                            | All `GetStreamUri` results          |
 | `getAdvertisedCapabilityEndpoints()`      | XAddr table                         |

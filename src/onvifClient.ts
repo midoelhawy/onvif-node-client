@@ -1,5 +1,10 @@
 import type { OnvifClientOptions } from "./types/options.js";
-import type { CameraDeviceInformation } from "./types/device.js";
+import type {
+    CameraDeviceInformation,
+    SetSystemDateAndTimeOptions,
+    SyncSystemDateAndTimeOptions,
+    SystemDateAndTime
+} from "./types/device.js";
 import type { MediaProfile, MediaProfileSummary, StreamUri } from "./types/media.js";
 import type { OnvifServices } from "./types/services.js";
 import { DeviceService } from "./services/deviceService.js";
@@ -11,6 +16,7 @@ import type { EventListenerOptions, PullMessagesResult, PullPointSubscription } 
 import { parseCapabilityEndpointsFromGetCapabilitiesXml } from "./core/capabilitiesParse.js";
 import type { OnvifServiceDirectoryEntry } from "./services/deviceService.js";
 import { probeRtspBackchannelDescribe, type RtspBackchannelProbeResult } from "./core/rtspBackchannelProbe.js";
+import type { OnvifRequestOptions } from "./types/transport.js";
 export class OnvifClient {
     readonly options: Required<Pick<OnvifClientOptions, "host">> & OnvifClientOptions;
     private readonly transport: OnvifTransport;
@@ -44,6 +50,69 @@ export class OnvifClient {
     async getDeviceInformation(): Promise<CameraDeviceInformation> {
         await this.ensureInit();
         return this.deviceSvc!.getDeviceInformation();
+    }
+    /** Read camera clock / NTP mode (`GetSystemDateAndTime`). */
+    async getSystemDateAndTime(opts?: OnvifRequestOptions): Promise<SystemDateAndTime> {
+        await this.ensureInit();
+        return this.deviceSvc!.getSystemDateAndTime(opts);
+    }
+    /** Set camera clock or switch to NTP (`SetSystemDateAndTime`). */
+    async setSystemDateAndTime(params: SetSystemDateAndTimeOptions, opts?: OnvifRequestOptions): Promise<void> {
+        await this.ensureInit();
+        return this.deviceSvc!.setSystemDateAndTime(params, opts);
+    }
+    /**
+     * Fix a broken camera clock by pushing host (or explicit) UTC time in Manual mode.
+     * Preserves camera TimeZone + DaylightSavings by default, then re-reads the clock.
+     * Pass `alignTimeZoneToHost: true` when the OSD local hour is wrong (e.g. winter TZ in summer).
+     */
+    async syncSystemDateAndTime(opts?: SyncSystemDateAndTimeOptions & OnvifRequestOptions): Promise<SystemDateAndTime> {
+        await this.ensureInit();
+        const reqOpts: OnvifRequestOptions | undefined =
+            opts?.timeoutMs === undefined && opts?.soapAction === undefined
+                ? undefined
+                : {
+                    ...(opts?.timeoutMs === undefined ? {} : { timeoutMs: opts.timeoutMs }),
+                    ...(opts?.soapAction === undefined ? {} : { soapAction: opts.soapAction })
+                };
+        const syncAt = opts?.date ?? new Date();
+        let timeZone = opts?.timeZone;
+        let daylightSavings = opts?.daylightSavings;
+        if (opts?.alignTimeZoneToHost) {
+            if (timeZone === undefined)
+                timeZone = formatHostGmtOffsetTimeZone(syncAt);
+            if (daylightSavings === undefined)
+                daylightSavings = false;
+        }
+        else {
+            const preserve = opts?.preserveCameraSettings !== false;
+            if (preserve && (timeZone === undefined || daylightSavings === undefined)) {
+                const current = await this.deviceSvc!.getSystemDateAndTime(reqOpts);
+                if (timeZone === undefined)
+                    timeZone = current.timeZone;
+                if (daylightSavings === undefined)
+                    daylightSavings = current.daylightSavings ?? false;
+            }
+        }
+        await this.deviceSvc!.setSystemDateAndTime(
+            {
+                dateTimeType: opts?.dateTimeType ?? "Manual",
+                daylightSavings: daylightSavings ?? false,
+                ...(timeZone === undefined ? {} : { timeZone }),
+                utcDateTime: syncAt
+            },
+            reqOpts
+        );
+        return this.deviceSvc!.getSystemDateAndTime(reqOpts);
+    }
+    /**
+     * Reboot the camera (`SystemReboot`).
+     * Returns an optional device `Message`. Some firmwares close the connection instead of
+     * answering — that usually still means reboot started.
+     */
+    async systemReboot(opts?: OnvifRequestOptions): Promise<{ message?: string }> {
+        await this.ensureInit();
+        return this.deviceSvc!.systemReboot(opts);
     }
     async getProfiles(): Promise<MediaProfileSummary[]> {
         await this.ensureInit();
@@ -221,6 +290,15 @@ export class OnvifClient {
     }
 }
 export type { OnvifClientOptions } from "./types/options.js";
+/** Host local offset as vendor-style `GMT±HH:MM` (matches many ONVIF OSD clocks). */
+export function formatHostGmtOffsetTimeZone(date = new Date()): string {
+    const totalMinutes = -date.getTimezoneOffset();
+    const sign = totalMinutes >= 0 ? "+" : "-";
+    const abs = Math.abs(totalMinutes);
+    const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+    const mm = String(abs % 60).padStart(2, "0");
+    return `GMT${sign}${hh}:${mm}`;
+}
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }

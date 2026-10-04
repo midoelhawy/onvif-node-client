@@ -1,5 +1,12 @@
 export type { OnvifClientOptions } from "./options.js";
-export type { CameraDeviceInformation } from "./device.js";
+export type {
+  CameraDeviceInformation,
+  OnvifDateTimeType,
+  OnvifDateTimeParts,
+  SystemDateAndTime,
+  SetSystemDateAndTimeOptions,
+  SyncSystemDateAndTimeOptions
+} from "./device.js";
 export type { MediaProfileSummary, MediaProfile, StreamUri } from "./media.js";
 export type { OnvifServices } from "./services.js";
 export type { OnvifRequestOptions } from "./transport.js";
