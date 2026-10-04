@@ -542,13 +542,19 @@ console.log(bc?.sdpSuggestsAudioBackchannel, bc?.sdpPreview);
 // Quick fix: push host UTC, keep camera TimeZone / DaylightSavings
 await client.syncSystemDateAndTime();
 
-// If OSD shows wrong local hour (e.g. GMT+01 in October): also align TZ to host
+// If OSD shows wrong local hour: align TZ to host (auto vendor vs POSIX style)
 await client.syncSystemDateAndTime({ alignTimeZoneToHost: true });
+
+// Explicit style (POSIX signs are inverted: UTC+2 → "GMT-2")
+await client.syncSystemDateAndTime({
+  alignTimeZoneToHost: true,
+  timeZoneStyle: "posix" // or "vendor" → "GMT+02:00"
+});
 
 // Explicit instant + TZ
 await client.syncSystemDateAndTime({
   date: new Date(),
-  timeZone: "GMT+02:00",
+  timeZone: "GMT-2",
   daylightSavings: false
 });
 

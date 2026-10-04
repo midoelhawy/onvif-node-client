@@ -3,6 +3,7 @@ export type {
   CameraDeviceInformation,
   OnvifDateTimeType,
   OnvifDateTimeParts,
+  OnvifTimeZoneStyle,
   SystemDateAndTime,
   SetSystemDateAndTimeOptions,
   SyncSystemDateAndTimeOptions

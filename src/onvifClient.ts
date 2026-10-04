@@ -1,6 +1,7 @@
 import type { OnvifClientOptions } from "./types/options.js";
 import type {
     CameraDeviceInformation,
+    OnvifTimeZoneStyle,
     SetSystemDateAndTimeOptions,
     SyncSystemDateAndTimeOptions,
     SystemDateAndTime
@@ -79,8 +80,14 @@ export class OnvifClient {
         let timeZone = opts?.timeZone;
         let daylightSavings = opts?.daylightSavings;
         if (opts?.alignTimeZoneToHost) {
-            if (timeZone === undefined)
-                timeZone = formatHostGmtOffsetTimeZone(syncAt);
+            let style = opts?.timeZoneStyle;
+            if (timeZone === undefined || style === undefined) {
+                const current = await this.deviceSvc!.getSystemDateAndTime(reqOpts);
+                if (style === undefined)
+                    style = detectTimeZoneStyle(current.timeZone);
+                if (timeZone === undefined)
+                    timeZone = formatHostGmtOffsetTimeZone(syncAt, style);
+            }
             if (daylightSavings === undefined)
                 daylightSavings = false;
         }
@@ -290,15 +297,37 @@ export class OnvifClient {
     }
 }
 export type { OnvifClientOptions } from "./types/options.js";
-/** Host local offset as vendor-style `GMT±HH:MM` (matches many ONVIF OSD clocks). */
-export function formatHostGmtOffsetTimeZone(date = new Date()): string {
-    const totalMinutes = -date.getTimezoneOffset();
-    const sign = totalMinutes >= 0 ? "+" : "-";
-    const abs = Math.abs(totalMinutes);
+
+/**
+ * Host UTC offset as an ONVIF TZ string.
+ * - `vendor`: `GMT+02:00` means UTC+2 (common on many Chinese firmwares)
+ * - `posix` (ONVIF default): signs are inverted — UTC+2 → `GMT-02:00`
+ */
+export function formatHostGmtOffsetTimeZone(date = new Date(), style: OnvifTimeZoneStyle = "posix"): string {
+    const utcPlusMinutes = -date.getTimezoneOffset();
+    const abs = Math.abs(utcPlusMinutes);
     const hh = String(Math.floor(abs / 60)).padStart(2, "0");
     const mm = String(abs % 60).padStart(2, "0");
-    return `GMT${sign}${hh}:${mm}`;
+    if (style === "vendor") {
+        const sign = utcPlusMinutes >= 0 ? "+" : "-";
+        return `GMT${sign}${hh}:${mm}`;
+    }
+    // POSIX: offset is what you add to local time to get UTC → invert the wall-clock sign.
+    const sign = utcPlusMinutes >= 0 ? "-" : "+";
+    return mm === "00" ? `GMT${sign}${Number(hh)}` : `GMT${sign}${hh}:${mm}`;
 }
+
+/** Guess TZ encoding from a device's current `tt:TZ` value. */
+export function detectTimeZoneStyle(tz?: string): OnvifTimeZoneStyle {
+    if (!tz)
+        return "posix";
+    const t = tz.trim();
+    // Vendor fixed offsets: GMT+02:00 / UTC-05:30
+    if (/^(GMT|UTC)[+-]\d{1,2}:\d{2}$/i.test(t))
+        return "vendor";
+    return "posix";
+}
+
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }

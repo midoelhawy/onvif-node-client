@@ -54,9 +54,15 @@ export interface SyncSystemDateAndTimeOptions {
     /** When true (default), keep TZ/DST from the camera unless overridden above */
     preserveCameraSettings?: boolean;
     /**
-     * When true, set TimeZone from the host UTC offset as `GMT±HH:MM` and force
-     * DaylightSavings=false (offset already includes DST). Overrides preserve for TZ/DST.
-     * Use this when the camera shows the wrong local hour despite correct UTC.
+     * When true, set TimeZone from the host UTC offset and force DaylightSavings=false
+     * (offset already includes DST). Overrides preserve for TZ/DST.
+     * Style is auto-detected from the camera's current TZ when possible:
+     * vendor `GMT+02:00` vs POSIX `GMT-2` / `CET-1CEST` (signs are opposite).
      */
     alignTimeZoneToHost?: boolean;
+    /** Force TZ string style for `alignTimeZoneToHost` (default: auto from camera). */
+    timeZoneStyle?: OnvifTimeZoneStyle;
 }
+
+/** How the device encodes fixed UTC offsets in `tt:TimeZone/TZ`. */
+export type OnvifTimeZoneStyle = "posix" | "vendor";
