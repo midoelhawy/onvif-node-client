@@ -539,15 +539,15 @@ console.log(bc?.sdpSuggestsAudioBackchannel, bc?.sdpPreview);
 
 
 ```ts
-// Quick fix: push host UTC, keep camera TimeZone / DaylightSavings
-await client.syncSystemDateAndTime();
+// Fix clock + OSD (default: align TZ/DST to host, verify local skew)
+const synced = await client.syncSystemDateAndTime();
+console.log(synced.sync.ok, synced.sync.localSkewMs, synced.timeZone);
 
-// If OSD shows wrong local hour: align TZ to host (auto vendor vs POSIX style)
-await client.syncSystemDateAndTime({ alignTimeZoneToHost: true });
+// Only push UTC, keep camera TZ (can leave OSD 1h off in summer)
+await client.syncSystemDateAndTime({ alignTimeZoneToHost: false });
 
 // Explicit style (POSIX signs are inverted: UTC+2 → "GMT-2")
 await client.syncSystemDateAndTime({
-  alignTimeZoneToHost: true,
   timeZoneStyle: "posix" // or "vendor" → "GMT+02:00"
 });
 

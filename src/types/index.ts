@@ -6,7 +6,9 @@ export type {
   OnvifTimeZoneStyle,
   SystemDateAndTime,
   SetSystemDateAndTimeOptions,
-  SyncSystemDateAndTimeOptions
+  SyncSystemDateAndTimeOptions,
+  SyncSystemDateAndTimeAttempt,
+  SyncSystemDateAndTimeResult
 } from "./device.js";
 export type { MediaProfileSummary, MediaProfile, StreamUri } from "./media.js";
 export type { OnvifServices } from "./services.js";

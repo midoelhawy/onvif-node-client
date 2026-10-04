@@ -1,9 +1,10 @@
 import type { OnvifClientOptions } from "./types/options.js";
 import type {
     CameraDeviceInformation,
-    OnvifTimeZoneStyle,
     SetSystemDateAndTimeOptions,
+    SyncSystemDateAndTimeAttempt,
     SyncSystemDateAndTimeOptions,
+    SyncSystemDateAndTimeResult,
     SystemDateAndTime
 } from "./types/device.js";
 import type { MediaProfile, MediaProfileSummary, StreamUri } from "./types/media.js";
@@ -18,6 +19,13 @@ import { parseCapabilityEndpointsFromGetCapabilitiesXml } from "./core/capabilit
 import type { OnvifServiceDirectoryEntry } from "./services/deviceService.js";
 import { probeRtspBackchannelDescribe, type RtspBackchannelProbeResult } from "./core/rtspBackchannelProbe.js";
 import type { OnvifRequestOptions } from "./types/transport.js";
+import {
+    buildTimeZoneAlignAttempts,
+    detectTimeZoneStyle,
+    formatHostGmtOffsetTimeZone,
+    toLocalDateTimeParts,
+    wallClockSkewMs
+} from "./core/onvifTimeZone.js";
 export class OnvifClient {
     readonly options: Required<Pick<OnvifClientOptions, "host">> & OnvifClientOptions;
     private readonly transport: OnvifTransport;
@@ -64,10 +72,11 @@ export class OnvifClient {
     }
     /**
      * Fix a broken camera clock by pushing host (or explicit) UTC time in Manual mode.
-     * Preserves camera TimeZone + DaylightSavings by default, then re-reads the clock.
-     * Pass `alignTimeZoneToHost: true` when the OSD local hour is wrong (e.g. winter TZ in summer).
+     * By default also aligns TZ/DST (`alignTimeZoneToHost: true`) so the video OSD local
+     * hour matches the host — keeping a winter TZ (e.g. CET-1) makes the UI look “ok”
+     * while the OSD stays one hour off.
      */
-    async syncSystemDateAndTime(opts?: SyncSystemDateAndTimeOptions & OnvifRequestOptions): Promise<SystemDateAndTime> {
+    async syncSystemDateAndTime(opts?: SyncSystemDateAndTimeOptions & OnvifRequestOptions): Promise<SyncSystemDateAndTimeResult> {
         await this.ensureInit();
         const reqOpts: OnvifRequestOptions | undefined =
             opts?.timeoutMs === undefined && opts?.soapAction === undefined
@@ -77,40 +86,98 @@ export class OnvifClient {
                     ...(opts?.soapAction === undefined ? {} : { soapAction: opts.soapAction })
                 };
         const syncAt = opts?.date ?? new Date();
-        let timeZone = opts?.timeZone;
-        let daylightSavings = opts?.daylightSavings;
-        if (opts?.alignTimeZoneToHost) {
-            let style = opts?.timeZoneStyle;
-            if (timeZone === undefined || style === undefined) {
-                const current = await this.deviceSvc!.getSystemDateAndTime(reqOpts);
-                if (style === undefined)
-                    style = detectTimeZoneStyle(current.timeZone);
-                if (timeZone === undefined)
-                    timeZone = formatHostGmtOffsetTimeZone(syncAt, style);
+        const maxUtcSkewMs = opts?.maxUtcSkewMs ?? 5000;
+        const maxLocalSkewMs = opts?.maxLocalSkewMs ?? 90_000;
+        const align = opts?.alignTimeZoneToHost !== false;
+        const dateTimeType = opts?.dateTimeType ?? "Manual";
+
+        const current = await this.deviceSvc!.getSystemDateAndTime(reqOpts);
+        const attemptsPlan: Array<{ label: string; timeZone?: string; daylightSavings: boolean }> = [];
+
+        if (opts?.timeZone !== undefined || opts?.daylightSavings !== undefined) {
+            attemptsPlan.push({
+                label: "explicit",
+                ...(opts.timeZone === undefined ? {} : { timeZone: opts.timeZone }),
+                daylightSavings: opts.daylightSavings ?? false
+            });
+        }
+        else if (align) {
+            for (const a of buildTimeZoneAlignAttempts(syncAt, current.timeZone, opts?.timeZoneStyle)) {
+                attemptsPlan.push(a);
             }
-            if (daylightSavings === undefined)
-                daylightSavings = false;
         }
         else {
             const preserve = opts?.preserveCameraSettings !== false;
-            if (preserve && (timeZone === undefined || daylightSavings === undefined)) {
-                const current = await this.deviceSvc!.getSystemDateAndTime(reqOpts);
-                if (timeZone === undefined)
-                    timeZone = current.timeZone;
-                if (daylightSavings === undefined)
-                    daylightSavings = current.daylightSavings ?? false;
-            }
+            attemptsPlan.push({
+                label: preserve ? "preserve" : "utc-only",
+                ...(preserve && current.timeZone !== undefined ? { timeZone: current.timeZone } : {}),
+                daylightSavings: preserve ? (current.daylightSavings ?? false) : false
+            });
         }
-        await this.deviceSvc!.setSystemDateAndTime(
-            {
-                dateTimeType: opts?.dateTimeType ?? "Manual",
-                daylightSavings: daylightSavings ?? false,
-                ...(timeZone === undefined ? {} : { timeZone }),
-                utcDateTime: syncAt
-            },
-            reqOpts
-        );
-        return this.deviceSvc!.getSystemDateAndTime(reqOpts);
+
+        const attemptResults: SyncSystemDateAndTimeAttempt[] = [];
+        let best: SystemDateAndTime = current;
+        let bestUtcSkew: number | undefined;
+        let bestLocalSkew: number | undefined;
+        let bestOk = false;
+
+        for (const plan of attemptsPlan) {
+            const now = opts?.date ?? new Date();
+            await this.deviceSvc!.setSystemDateAndTime(
+                {
+                    dateTimeType,
+                    daylightSavings: plan.daylightSavings,
+                    ...(plan.timeZone === undefined ? {} : { timeZone: plan.timeZone }),
+                    utcDateTime: now
+                },
+                reqOpts
+            );
+            // Second write helps firmwares that apply TZ only on a subsequent SetSystemDateAndTime.
+            await this.deviceSvc!.setSystemDateAndTime(
+                {
+                    dateTimeType,
+                    daylightSavings: plan.daylightSavings,
+                    ...(plan.timeZone === undefined ? {} : { timeZone: plan.timeZone }),
+                    utcDateTime: opts?.date ?? new Date()
+                },
+                reqOpts
+            );
+
+            const after = await this.deviceSvc!.getSystemDateAndTime(reqOpts);
+            const hostNow = new Date();
+            const utcSkewMs = after.utc ? after.utc.getTime() - hostNow.getTime() : undefined;
+            const localSkewMs = after.localDateTime
+                ? wallClockSkewMs(after.localDateTime, toLocalDateTimeParts(hostNow))
+                : undefined;
+            attemptResults.push({
+                label: plan.label,
+                ...(plan.timeZone === undefined ? {} : { timeZone: plan.timeZone }),
+                daylightSavings: plan.daylightSavings,
+                ...(utcSkewMs === undefined ? {} : { utcSkewMs }),
+                ...(localSkewMs === undefined ? {} : { localSkewMs })
+            });
+
+            const utcOk = utcSkewMs === undefined || Math.abs(utcSkewMs) <= maxUtcSkewMs;
+            const localOk = localSkewMs === undefined || Math.abs(localSkewMs) <= maxLocalSkewMs;
+            const ok = utcOk && localOk;
+            best = after;
+            bestUtcSkew = utcSkewMs;
+            bestLocalSkew = localSkewMs;
+            bestOk = ok;
+            if (ok)
+                break;
+        }
+
+        return {
+            ...best,
+            sync: {
+                ok: bestOk,
+                hostUtc: (opts?.date ?? new Date()).toISOString(),
+                ...(bestUtcSkew === undefined ? {} : { utcSkewMs: bestUtcSkew }),
+                ...(bestLocalSkew === undefined ? {} : { localSkewMs: bestLocalSkew }),
+                attempts: attemptResults
+            }
+        };
     }
     /**
      * Reboot the camera (`SystemReboot`).
@@ -297,36 +364,12 @@ export class OnvifClient {
     }
 }
 export type { OnvifClientOptions } from "./types/options.js";
-
-/**
- * Host UTC offset as an ONVIF TZ string.
- * - `vendor`: `GMT+02:00` means UTC+2 (common on many Chinese firmwares)
- * - `posix` (ONVIF default): signs are inverted — UTC+2 → `GMT-02:00`
- */
-export function formatHostGmtOffsetTimeZone(date = new Date(), style: OnvifTimeZoneStyle = "posix"): string {
-    const utcPlusMinutes = -date.getTimezoneOffset();
-    const abs = Math.abs(utcPlusMinutes);
-    const hh = String(Math.floor(abs / 60)).padStart(2, "0");
-    const mm = String(abs % 60).padStart(2, "0");
-    if (style === "vendor") {
-        const sign = utcPlusMinutes >= 0 ? "+" : "-";
-        return `GMT${sign}${hh}:${mm}`;
-    }
-    // POSIX: offset is what you add to local time to get UTC → invert the wall-clock sign.
-    const sign = utcPlusMinutes >= 0 ? "-" : "+";
-    return mm === "00" ? `GMT${sign}${Number(hh)}` : `GMT${sign}${hh}:${mm}`;
-}
-
-/** Guess TZ encoding from a device's current `tt:TZ` value. */
-export function detectTimeZoneStyle(tz?: string): OnvifTimeZoneStyle {
-    if (!tz)
-        return "posix";
-    const t = tz.trim();
-    // Vendor fixed offsets: GMT+02:00 / UTC-05:30
-    if (/^(GMT|UTC)[+-]\d{1,2}:\d{2}$/i.test(t))
-        return "vendor";
-    return "posix";
-}
+export {
+    formatHostGmtOffsetTimeZone,
+    detectTimeZoneStyle,
+    buildTimeZoneAlignAttempts,
+    parsePosixStdUtcPlusMinutes
+} from "./core/onvifTimeZone.js";
 
 function sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));

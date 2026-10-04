@@ -24,7 +24,7 @@ import { … } from "onvif-node-client";
 - `OnvifClient`
 - `OnvifClientOptions`, `OnvifAuth`
 - media / events / device / soap types
-- device clock: `getSystemDateAndTime`, `setSystemDateAndTime`, `syncSystemDateAndTime` (`SystemDateAndTime`, `SetSystemDateAndTimeOptions`, `SyncSystemDateAndTimeOptions`)
+- device clock: `getSystemDateAndTime`, `setSystemDateAndTime`, `syncSystemDateAndTime` (`SystemDateAndTime`, `SyncSystemDateAndTimeResult`, `SetSystemDateAndTimeOptions`, `SyncSystemDateAndTimeOptions`)
 - device reboot: `systemReboot()`
 
 ## RTSP / recording utils
